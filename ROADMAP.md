@@ -3,7 +3,8 @@
 Status as of 2026-10-26: v0.1.0, working against a NEO-F10N on SPG 6.00 on Linux and macOS.
 Implemented: Status (with odometer and an AGC-based antenna guess), Satellites, Configuration (all
 layers, edit/revert), Messages matrix, Console, Tools (save/clear/export/import/resets), 9 validated
-presets, gpsd conflict handling, port auto-detection.
+presets, gpsd conflict handling, port auto-detection, link-load warning. Tests run in CI on
+Python 3.10–3.15; published to PyPI.
 
 ## Verify on hardware
 
@@ -18,9 +19,11 @@ settings with nothing in BBR/Flash, so it's a safe place to try the flash and re
 
 ## Next
 
-- [ ] Warn when the enabled output can't fit the baud rate. `profile-car` (10 Hz) at 38400 baud with
-      the default NMEA set saturates the UART: the receiver drops UBX replies, so status polling goes
-      blank and baud detection fails on the next start.
+- [x] Warn when the output can't fit the baud rate (Status tab link load), and keep baud detection
+      working when a saturated UART drops replies.
+- [ ] Port auto-detection with several USB serial devices: `find_port` goes by vendor ID only, so an
+      NMEA-only puck on a CP2102N wins over a u-blox on a CH340. Probe the candidates in order and use
+      the first that answers UBX (`detect_baud` already raises `NoUbxReply` for NMEA-only devices).
 - [ ] macOS: nothing checks for other programs holding the port (`portcheck` needs `/proc`). Open it
       with pyserial's `exclusive=True` and name any holders with `lsof`.
 - [ ] Make undocumented keys read-only in the editor.
@@ -28,15 +31,14 @@ settings with nothing in BBR/Flash, so it's a safe place to try the flash and re
       (at least 26 on the NEO-F10N).
 - [ ] Tools tab: "newer firmware known" line from a built-in table of latest version per firmware
       family (no network access). F10 SPG 7.01 was published 2026-09-02.
-- [ ] Test suite: unit tests for `ubx.py` (framing, `Framer`, encode/decode, `parse_value`),
-      `antenna_guess` and `find_port`, and headless app tests against a stub `Device`. CI to run them.
+- [x] Test suite (`tests/`) and CI on Python 3.10–3.15; releases require it.
+- [ ] Linting (ruff) in CI.
 
 ## Before sharing
 
 - [x] git repository, license, `.gitignore` (github.com/shawcx/ubxctl, MIT).
 - [x] README screenshots (`scripts/screenshots.py`).
-- [ ] Publish to PyPI as `ubxctl`. Packaging and the release workflow are done; the first release
-      needs the PyPI trusted publisher set up, then `gh release create v0.1.0`.
+- [x] Published to PyPI as `ubxctl` (0.1.0 on 2026-10-26, via the release workflow).
 - [ ] Rename internal `UbloxApp` class to match the project name.
 
 ## Later

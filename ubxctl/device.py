@@ -14,6 +14,7 @@ from pyubx2 import UBXReader
 from . import ubx
 
 BAUD_CANDIDATES = (38400, 9600, 115200, 230400, 460800, 921600)
+SATURATED_RETRIES = 4  # MON-VER polls at a rate with valid traffic but no reply yet
 # USB vendor IDs in find_port() preference order: u-blox native USB, then USB-serial bridges
 # (FTDI, Silicon Labs CP210x, WCH CH340, Prolific PL2303).
 USB_VIDS = {vid: i for i, vid in enumerate((0x1546, 0x0403, 0x10C4, 0x1A86, 0x067B))}
@@ -241,17 +242,36 @@ class Device:
         self.write(ubx.cfg_rst(nav_bbr_mask, reset_mode))
 
 
+class NoUbxReply(Exception):
+    """The device sends valid NMEA/UBX at some baud rate but never answers a UBX poll."""
+
+
 def detect_baud(port: str, candidates=BAUD_CANDIDATES) -> int | None:
-    """Find the baud rate at which the receiver answers a UBX poll."""
+    """Find the baud rate at which the receiver answers a UBX poll.
+
+    Valid NMEA or UBX traffic means the rate is right even without a reply: a UART saturated
+    with output drops some replies, so that rate gets longer retries instead of being skipped.
+    Raises NoUbxReply if the device talks but never answers (not a u-blox receiver, or UBX
+    input is off).
+    """
     for baud in candidates:
         try:
             d = Device(port, baud)
             d.open()
         except serial.SerialException:
             return None
+        valid: list[str] = []
+        d.add_listener(lambda kind, item: valid.append(kind)
+                       if kind == "UBX" or (kind == "NMEA" and ubx.nmea_ok(item)) else None)
         try:
             if d.mon_ver(timeout=0.6):
                 return baud
+            if len(valid) >= 2:
+                for _ in range(SATURATED_RETRIES):
+                    if d.mon_ver(timeout=1.0):
+                        return baud
+                raise NoUbxReply(f"valid NMEA at {baud} baud but no reply to UBX polls; "
+                                 "not a u-blox receiver, or its UBX input is off")
         finally:
             d.close()
     return None

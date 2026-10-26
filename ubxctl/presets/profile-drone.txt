@@ -2,6 +2,8 @@
 # Airborne <4g dynamic model at 10 Hz. Portable and automotive models assume small vertical
 # speeds and can lag or reject fixes during climbs and fast maneuvers; this one doesn't.
 # ArduPilot and PX4 configure the receiver themselves unless auto-config is turned off.
+# At 10 Hz the factory NMEA output (~870 bytes per fix) needs 115200 baud or more; at 38400
+# the link saturates and replies get dropped. Or combine with output-nmea-minimal.
 
 CFG-NAVSPG-DYNMODEL 8
 CFG-RATE-MEAS 100

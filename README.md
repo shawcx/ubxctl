@@ -57,14 +57,19 @@ Rates in `CFG-MSGOUT-*` are per navigation solution (10 = every 10th fix).
 | `output-nmea-minimal` | GGA + RMC only, ~85% less serial traffic |
 | `output-ubx-binary` | NMEA off; UBX NAV-PVT + NAV-DOP every fix, NAV-SAT every 10th |
 | `profile-portable` | Portable model, 1 Hz (factory default); undoes the other profiles |
-| `profile-car` | Automotive model, 10 Hz, odometer on its car profile |
-| `profile-drone` | Airborne <4g model, 10 Hz |
+| `profile-car` | Automotive model, 10 Hz, odometer on its car profile (see baud note below) |
+| `profile-drone` | Airborne <4g model, 10 Hz (see baud note below) |
 | `profile-timing` | Stationary model, 1 Hz, NMEA ZDA on (for NTP via gpsd/chrony) |
 | `gps-l5-override` | Use GPS L5 despite its pre-operational "unhealthy" flag |
 | `jamming-monitor` | Enable interference detection (Status tab shows OK/warning/critical) |
 
 To make your own, export from Tools and edit the file. The leading `#` lines become the title
 and description in the picker.
+
+**Baud rate:** the factory NMEA set is ~870 bytes per fix, so at 10 Hz it needs 115200 baud or
+more; at the factory 38400 the link saturates and the receiver drops replies to ubxctl's polls.
+The Status tab shows the link load and warns above 90%. Raise `CFG-UART1-BAUDRATE`, or combine the
+10 Hz profiles with `output-nmea-minimal` or `output-ubx-binary`.
 
 ## Notes
 

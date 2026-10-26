@@ -204,6 +204,20 @@ def poll(cls: int, mid: int) -> bytes:
 # --- stream framer ----------------------------------------------------------
 
 
+def nmea_ok(line: str) -> bool:
+    """True if an NMEA sentence ("$...*HH") carries a matching checksum."""
+    body, star, cs = line[1:].rpartition("*")
+    if line[:1] != "$" or not star or len(cs) != 2:
+        return False
+    x = 0
+    for c in body.encode("ascii", "replace"):
+        x ^= c
+    try:
+        return int(cs, 16) == x
+    except ValueError:
+        return False
+
+
 class Framer:
     """Splits a byte stream into UBX frames and NMEA sentences."""
 

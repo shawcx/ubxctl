@@ -19,7 +19,7 @@ from textual.widgets import (Button, Checkbox, DataTable, Footer, Header, Input,
 from textual.widgets.option_list import Option
 
 from . import portcheck, ubx
-from .device import BAUD_CANDIDATES, Device, detect_baud, parse_ubx
+from .device import BAUD_CANDIDATES, Device, NoUbxReply, detect_baud, parse_ubx
 from .keyinfo import info
 
 PRESET_DIR = Path(__file__).parent / "presets"
@@ -40,6 +40,8 @@ CARR_SOLN = {0: "", 1: " RTK float", 2: " RTK fixed"}
 ANT_STATUS = {0: "init", 1: "unknown", 2: "OK", 3: "SHORT", 4: "OPEN"}
 ANT_POWER = {0: "off", 1: "on", 2: "unknown"}
 AGC_ACTIVE_MAX = 40  # % of max gain; below this an active antenna is likely (see antenna_guess)
+LINK_WINDOW = 5.0  # seconds of RX byte counts behind the link load figure
+LINK_SATURATED = 0.9  # load at which the receiver starts dropping replies
 JAM_STATE = {0: "unknown", 1: "OK", 2: "warning", 3: "CRITICAL"}
 PORT_ORDER = ["I2C", "UART1", "UART2", "USB", "SPI"]
 POLLED = [(ubx.CLS_NAV, 0x07), (ubx.CLS_NAV, 0x04), (ubx.CLS_NAV, 0x35), (ubx.CLS_NAV, 0x43),
@@ -75,6 +77,17 @@ def edit_text(kd: ubx.KeyDef, raw: bytes | None) -> str:
 
 def fmt_dist(m: int) -> str:
     return f"{m} m" if m < 1000 else f"{m / 1000:.2f} km"
+
+
+def link_load(samples, baud: int, min_span: float = 3.0) -> float | None:
+    """Fraction of the UART's capacity (8N1: baud / 10 bytes/s) used by received data.
+
+    `samples` are (monotonic time, total RX bytes), oldest first; None until they span `min_span`.
+    """
+    if len(samples) < 2 or samples[-1][0] - samples[0][0] < min_span:
+        return None
+    (t0, b0), (t1, b1) = samples[0], samples[-1]
+    return (b1 - b0) / (t1 - t0) / (baud / 10)
 
 
 def antenna_guess(agc_pct: float, lna_mode: int | None, jam: str, tracking: bool) -> tuple[str, str]:
@@ -304,6 +317,9 @@ class UbloxApp(App):
         self.sat_rows: list = []
         self.sig: dict[tuple[int, int], list[tuple[str, int]]] = {}
         self.last_pvt = 0.0
+        self.link: collections.deque = collections.deque()  # (time, rx_bytes) for link_load
+        self.link_baud = device.baud
+        self.link_saturated = False
         self.msg_keys: dict[tuple[str, str], int] = {}
         device.add_listener(lambda kind, item: self.inbox.append((kind, item)))
 
@@ -374,6 +390,7 @@ class UbloxApp(App):
         self._render_rxinfo()
         self.set_interval(0.2, self._drain)
         self.set_interval(1.0, self._poll)
+        self.set_interval(1.0, self._tick)
         self.load_config()
 
     def _update_subtitle(self) -> None:
@@ -434,6 +451,24 @@ class UbloxApp(App):
                 self.dev.write(ubx.poll(cls, mid))
             except Exception:
                 return
+
+    def _tick(self) -> None:
+        now = time.monotonic()
+        if self.dev.baud != self.link_baud:  # samples from the old rate don't apply
+            self.link.clear()
+            self.link_baud = self.dev.baud
+        self.link.append((now, self.dev.rx_bytes))
+        while now - self.link[0][0] > LINK_WINDOW:
+            self.link.popleft()
+        load = link_load(self.link, self.dev.baud)
+        saturated = load is not None and load >= LINK_SATURATED
+        if saturated and not self.link_saturated:
+            self.notify(f"Serial link saturated ({load:.0%} of {self.dev.baud} baud): the receiver is "
+                        "dropping replies. Raise CFG-UART1-BAUDRATE or reduce output.",
+                        severity="warning", timeout=15)
+        self.link_saturated = saturated
+        # Also redraws when replies stop arriving, so the link and staleness rows stay current.
+        self._render_status()
 
     def _drain(self) -> None:
         log = self.query_one("#log", RichLog)
@@ -569,6 +604,13 @@ class UbloxApp(App):
             r.add_row("RF", "waiting for MON-RF…")
         r.add_row("", "")
         r.add_row("Link", f"RX {self.dev.rx_bytes:,} B   TX {self.dev.tx_bytes:,} B")
+        load = link_load(self.link, self.dev.baud)
+        if load is not None:
+            hot = load >= LINK_SATURATED
+            r.add_row("  Load", Text(f"{load:.0%} of {self.dev.baud} baud", style="bold red" if hot else ""))
+            if hot:
+                r.add_row("", Text("Saturated: replies get dropped. Raise CFG-UART1-BAUDRATE or reduce "
+                                   "output (e.g. output-nmea-minimal).", style="red"))
         if self.last_pvt and time.monotonic() - self.last_pvt > 3:
             r.add_row("", Text("No NAV-PVT for > 3 s", style="bold red"))
         self.query_one("#rf", Static).update(r)
@@ -1000,12 +1042,19 @@ def run(port: str, baud: int | None) -> None:
 def _run(port: str, baud: int | None) -> None:
     if baud is None:
         print(f"Looking for receiver on {port}…")
-        baud = detect_baud(port, (921600,) + BAUD_CANDIDATES)
+        try:
+            baud = detect_baud(port, (921600,) + BAUD_CANDIDATES)
+        except NoUbxReply as e:
+            raise SystemExit(f"{port}: {e}")
         if baud is None:
             raise SystemExit(f"No UBX response on {port} at any of {BAUD_CANDIDATES}")
     dev = Device(port, baud)
     dev.open()
-    rxinfo = dev.mon_ver()
+    rxinfo = None
+    for _ in range(3):  # a UART saturated with output can drop the reply
+        rxinfo = dev.mon_ver()
+        if rxinfo:
+            break
     if rxinfo is None:
         dev.close()
         raise SystemExit(f"No UBX response on {port} at {baud} baud")

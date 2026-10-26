@@ -28,6 +28,9 @@ Issues = "https://github.com/shawcx/ubxctl/issues"
 [project.scripts]
 ubxctl = "ubxctl.__main__:main"
 
+[dependency-groups]
+test = ["pytest>=8"]
+
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
@@ -37,3 +40,6 @@ packages = ["ubxctl"]
 
 [tool.setuptools.package-data]
 ubxctl = ["*.tcss", "presets/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,6 +1,8 @@
 # Profile: car, 10 Hz
 # Automotive dynamic model (assumes low vertical velocity and limited acceleration, which
 # smooths the track) at 10 Hz, with the odometer on its car profile.
+# At 10 Hz the factory NMEA output (~870 bytes per fix) needs 115200 baud or more; at 38400
+# the link saturates and replies get dropped. Or combine with output-nmea-minimal.
 
 CFG-NAVSPG-DYNMODEL 4
 CFG-RATE-MEAS 100

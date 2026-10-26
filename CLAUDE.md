@@ -14,6 +14,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .   # editable install; restar
 .venv/bin/ubxctl -p /dev/ttyACM0 -b 921600
 .venv/bin/python -c "import ubxctl.app"               # quick import/syntax check
 .venv/bin/python scripts/screenshots.py [port [baud]] # regenerate docs/*.svg from a receiver (read-only)
+.venv/bin/pip install --group test && .venv/bin/python -m pytest   # tests (~25 s, no hardware)
 uv build && uvx twine check --strict dist/*           # check packaging
 ```
 
@@ -22,12 +23,19 @@ Releases: bump `version` in `pyproject.toml`, push, then `gh release create vX.Y
 tag doesn't match the version. The README uses absolute `raw.githubusercontent.com` image URLs so
 they also render on PyPI.
 
-There is no test suite, linter or CI yet (see ROADMAP.md). UI changes can be checked headlessly with
-`App.run_test()` and `app.save_screenshot()`. For runs that shouldn't touch hardware, pass `UbloxApp` a
-stub object with the `Device` methods it calls: `write`, `poll`, `send_acked`, `valget`, `valset`,
-`valdel`, `add_listener` (plus `reset`, `mon_ver`, `set_receiver_baud`, `set_local_baud` for the Tools
-and baud paths), and the `port`, `baud`, `ser`, `rx_bytes`, `tx_bytes` attributes. Feed it
-frames built with `ubx.frame()` by appending `("UBX", frame)` to `app.inbox`.
+Tests (pytest, in `tests/`) need no hardware:
+- `test_ubx.py`: framing, `Framer`, key IDs, encode/decode, `nmea_ok`.
+- `test_device.py`: `Device`, `detect_baud` and `find_port` against `FakeReceiver`, a stand-in for
+  `serial.Serial` that streams NMEA at the right baud, noise at others, answers MON-VER/VALGET/VALSET,
+  and can drop replies like a saturated UART.
+- `test_app.py`: the app headless (`App.run_test()`) against `StubDevice`, which has the `Device`
+  methods the app calls (`write`, `poll`, `send_acked`, `valget`, `valset`, `valdel`, `add_listener`,
+  `mon_ver`) and the `port`, `baud`, `ser`, `rx_bytes`, `tx_bytes` attributes. Feed it frames (pyubx2's
+  `UBXMessage(...).serialize()` or `ubx.frame()`) by appending `("UBX", frame)` to `app.inbox`. The Tools
+  and baud paths also call `reset`, `set_receiver_baud` and `set_local_baud`.
+
+CI (`.github/workflows/ci.yml`) runs them on Python 3.10–3.15 on Linux and 3.15 on macOS, and the
+release workflow requires it. No linter yet. `app.save_screenshot()` checks UI changes by eye.
 
 ## Working with the real receiver
 
@@ -36,12 +44,19 @@ frames built with `ubx.frame()` by appending `("UBX", frame)` to `app.inbox`.
     921600, car profile, odometer and others).
   - macOS: `/dev/cu.usbserial-110` (CH340 adapter) at 38400 baud, factory settings with nothing in
     BBR/Flash, dual-band active antenna (AGC 7–11% connected, 73% unplugged).
+  - Also on the Mac at times, two NMEA-only pucks (not u-blox; `detect_baud` raises `NoUbxReply`):
+    - MediaTek MT3333 (AXN 5.1.6, 9600 baud) on `/dev/cu.usbserial-210` (CP2102N). `find_port` prefers
+      CP210x over CH340, so pass `-p /dev/cu.usbserial-110` while it's plugged in.
+    - Airoha AG3335M (L1/L5, firmware V3.2.1 2024-06-20, 115200 baud, answers `$PAIR021`) on
+      `/dev/cu.PL2303G-USBtoUART210` (PL2303GC; needs Prolific's "PL2303 Serial" App Store driver).
 - **Check for a running ubxctl before opening the port**: `pgrep -af ubxctl` on Linux, `pgrep -fl ubxctl`
   on macOS (BSD `-a` means something else). Serial ports aren't exclusive on either. If the user's
   ubxctl is running, both processes get a corrupted stream and request/response matching breaks.
-- 10 Hz with the default NMEA set needs more than 38400 baud. The UART saturates, the receiver drops UBX
-  replies (large ones like NAV-SAT first), and `detect_baud`'s 0.6 s probe fails. To work through it,
-  set `CFG-UART1OUTPROT-NMEA` false in RAM, then restore it.
+- The default NMEA set is ~870 bytes per fix, so 10 Hz needs 115200 baud or more. At 38400 the UART
+  saturates and the receiver drops UBX replies (large ones like NAV-SAT first). `detect_baud` and
+  startup retry MON-VER at a rate with valid traffic, and the Status tab shows the link load and
+  warns at 90% (`LINK_SATURATED`). For test runs, set `CFG-UART1OUTPROT-NMEA` false in RAM, then
+  restore it.
 - Test writes go to the RAM layer only. Snapshot the values with `valget` first and restore them
   afterwards. Never write BBR/Flash or reboot the receiver without asking: those change the user's
   saved setup.
