@@ -1,25 +1,18 @@
 import argparse
-import glob
-import sys
 
 from .app import run
-
-
-def default_port() -> str:
-    if sys.platform == "darwin":
-        ports = sorted(glob.glob("/dev/cu.usbserial-*"))
-        if ports:
-            return ports[0]
-    return "/dev/ttyUSB0"
+from .device import find_port
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(prog="ubxctl", description="Configure a u-blox GNSS receiver (unofficial)")
-    ap.add_argument("-p", "--port", default=default_port(),
-                    help="serial port (default: /dev/ttyUSB0, first /dev/cu.usbserial-* on macOS)")
+    ap.add_argument("-p", "--port", help="serial port (default: first u-blox or USB-serial adapter found)")
     ap.add_argument("-b", "--baud", type=int, help="baud rate (default: auto-detect)")
     args = ap.parse_args()
-    run(args.port, args.baud)
+    port = args.port or find_port()
+    if port is None:
+        raise SystemExit("No USB serial port found; pass one with -p")
+    run(port, args.baud)
 
 
 if __name__ == "__main__":

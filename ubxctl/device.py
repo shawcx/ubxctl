@@ -8,11 +8,15 @@ import time
 from collections.abc import Callable
 
 import serial
+from serial.tools import list_ports
 from pyubx2 import UBXReader
 
 from . import ubx
 
 BAUD_CANDIDATES = (38400, 9600, 115200, 230400, 460800, 921600)
+# USB vendor IDs in find_port() preference order: u-blox native USB, then USB-serial bridges
+# (FTDI, Silicon Labs CP210x, WCH CH340, Prolific PL2303).
+USB_VIDS = {vid: i for i, vid in enumerate((0x1546, 0x0403, 0x10C4, 0x1A86, 0x067B))}
 
 Listener = Callable[[str, object], None]
 
@@ -251,3 +255,10 @@ def detect_baud(port: str, candidates=BAUD_CANDIDATES) -> int | None:
         finally:
             d.close()
     return None
+
+
+def find_port() -> str | None:
+    """The most likely receiver port: u-blox native USB first, then common USB-serial adapters."""
+    ports = [p for p in list_ports.comports() if p.vid is not None]
+    ports.sort(key=lambda p: (USB_VIDS.get(p.vid, len(USB_VIDS)), p.device))
+    return ports[0].device if ports else None
