@@ -10,7 +10,7 @@ out of names and titles, and keep the README disclaimer.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e .   # editable install; restart ubxctl to pick up edits
-.venv/bin/ubxctl                                      # /dev/ttyUSB0, auto-detects baud
+.venv/bin/ubxctl                                      # /dev/ttyUSB0 (macOS: first /dev/cu.usbserial-*), auto-detects baud
 .venv/bin/ubxctl -p /dev/ttyACM0 -b 921600
 .venv/bin/python -c "import ubxctl.app"               # quick import/syntax check
 ```

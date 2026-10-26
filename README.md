@@ -7,7 +7,7 @@ An unofficial terminal configuration tool for u-blox generation 9+ GNSS receiver
 > u-blox AG. u-blox and u-center are trademarks of u-blox AG.
 
 ```
-.venv/bin/ubxctl                         # /dev/ttyUSB0, auto-detect baud
+.venv/bin/ubxctl                         # /dev/ttyUSB0 (macOS: first /dev/cu.usbserial-*), auto-detect baud
 .venv/bin/ubxctl -p /dev/ttyACM0 -b 921600
 ```
 

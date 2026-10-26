@@ -162,6 +162,8 @@ def free_port(port: str) -> list[str]:
     real = os.path.realpath(port)
     if not os.path.exists(real):
         return []
+    if not os.path.isdir("/proc"):  # macOS: no procfs to inspect and no systemd gpsd
+        return []
     procs = _procs()
 
     others = [p for p in holders(real, procs) if p.name != "gpsd"]
