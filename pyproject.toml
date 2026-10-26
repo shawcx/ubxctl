@@ -2,15 +2,38 @@
 name = "ubxctl"
 version = "0.1.0"
 description = "Unofficial terminal configuration tool for u-blox generation 9+ GNSS receivers"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Matthew Shaw" }]
 requires-python = ">=3.10"
 dependencies = ["textual>=0.80", "pyubx2>=1.2", "pyserial>=3.5"]
+keywords = ["gnss", "gps", "ubx", "u-blox", "tui", "textual", "serial"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Terminals :: Serial",
+]
+
+[project.urls]
+Homepage = "https://github.com/shawcx/ubxctl"
+Issues = "https://github.com/shawcx/ubxctl/issues"
 
 [project.scripts]
 ubxctl = "ubxctl.__main__:main"
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ubxctl"]
 
 [tool.setuptools.package-data]
 ubxctl = ["*.tcss", "presets/*.txt"]

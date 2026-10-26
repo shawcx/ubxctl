@@ -1,17 +1,24 @@
 # ubxctl
 
 An unofficial terminal configuration tool for u-blox generation 9+ GNSS receivers
-(M10, F10, F9, X20), in the spirit of u-center 2. Tested against a NEO-F10N (SPG 6.00).
+(M10, F10, F9, X20), in the spirit of u-center 2. Tested against a NEO-F10N (SPG 6.00) on
+Linux and macOS.
 
 > ubxctl is an independent project. It is not affiliated with, endorsed by, or supported by
 > u-blox AG. u-blox and u-center are trademarks of u-blox AG.
 
+![Status tab](https://raw.githubusercontent.com/shawcx/ubxctl/main/docs/status.svg)
+
+## Install
+
 ```
-.venv/bin/ubxctl                         # /dev/ttyUSB0 (macOS: first /dev/cu.usbserial-*), auto-detect baud
-.venv/bin/ubxctl -p /dev/ttyACM0 -b 921600
+pipx install ubxctl        # or: uv tool install ubxctl
+ubxctl                     # auto-detects the port and baud rate
+ubxctl -p /dev/ttyACM0 -b 921600
 ```
 
-Setup: `python3 -m venv .venv && .venv/bin/pip install -e .`
+Without `-p`, ubxctl picks the first u-blox USB device, else the first common USB-serial adapter
+(FTDI, CP210x, CH340, PL2303). From a checkout: `python3 -m venv .venv && .venv/bin/pip install -e .`
 
 ## Tabs (keys 1–6)
 
@@ -30,6 +37,13 @@ Setup: `python3 -m venv .venv && .venv/bin/pip install -e .`
 
 Status data is fetched by polling (NAV-PVT, NAV-DOP, NAV-SAT, NAV-SIG, MON-RF once a second), so it
 doesn't change the receiver's output configuration. `p` pauses polling.
+
+![Satellites tab](https://raw.githubusercontent.com/shawcx/ubxctl/main/docs/satellites.svg)
+
+![Configuration tab](https://raw.githubusercontent.com/shawcx/ubxctl/main/docs/configuration.svg)
+
+Screenshots are regenerated from a connected receiver with `scripts/screenshots.py` (read-only;
+the position and time are replaced with a made-up fix).
 
 ## Presets
 
