@@ -1,0 +1,7 @@
+# Use GPS L5 in the position solution
+# GPS L5 is still pre-operational, so satellites flag it unhealthy and by default the receiver
+# tracks L5 but doesn't use it. This overrides the health flag so L5 is used as well, which
+# mainly helps against multipath near buildings. u-blox supports this override, but you are
+# relying on a signal the US Space Force has not declared operational. Set to false to undo.
+
+CFG-SIGNAL-HEALTH_L5 true

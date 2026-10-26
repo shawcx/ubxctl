@@ -1,0 +1,8 @@
+# Profile: portable, 1 Hz (factory default)
+# General-purpose dynamic model and the factory 1 Hz update rate. Use this to undo the other
+# profiles.
+
+CFG-NAVSPG-DYNMODEL 0
+CFG-RATE-MEAS 1000
+CFG-RATE-NAV 1
+CFG-ODO-PROFILE 0

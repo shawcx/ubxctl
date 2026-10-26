@@ -1,0 +1,16 @@
+[project]
+name = "ubxctl"
+version = "0.1.0"
+description = "Unofficial terminal configuration tool for u-blox generation 9+ GNSS receivers"
+requires-python = ">=3.10"
+dependencies = ["textual>=0.80", "pyubx2>=1.2", "pyserial>=3.5"]
+
+[project.scripts]
+ubxctl = "ubxctl.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+ubxctl = ["*.tcss", "presets/*.txt"]

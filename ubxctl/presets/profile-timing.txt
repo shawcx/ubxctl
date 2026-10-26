@@ -1,0 +1,9 @@
+# Profile: stationary / timing, 1 Hz
+# Stationary dynamic model (tightest solution for an antenna that never moves) at 1 Hz, plus the
+# NMEA ZDA time-and-date sentence. The 1 PPS time pulse is already on by default. Good for an NTP
+# server via gpsd/chrony, or a fixed reference.
+
+CFG-NAVSPG-DYNMODEL 2
+CFG-RATE-MEAS 1000
+CFG-RATE-NAV 1
+CFG-MSGOUT-NMEA_ID_ZDA_UART1 1

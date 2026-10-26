@@ -1,0 +1,95 @@
+.panel {
+    width: 1fr;
+    height: auto;
+    padding: 1 2;
+    border: round $primary;
+}
+
+#status-panels {
+    height: auto;
+}
+
+#cfg-left {
+    width: 30;
+}
+
+#groups {
+    height: 1fr;
+}
+
+#cfg-right {
+    width: 1fr;
+}
+
+#cfgtable, #msgtable, #sattable {
+    height: 1fr;
+}
+
+#keyhelp {
+    height: 5;
+    padding: 0 1;
+    border-top: solid $primary;
+}
+
+.hint {
+    color: $text-muted;
+    padding: 0 1;
+}
+
+#console-opts {
+    height: auto;
+}
+
+#log {
+    height: 1fr;
+}
+
+.section {
+    margin: 1 0 0 1;
+    text-style: bold;
+}
+
+.buttons {
+    height: auto;
+    margin: 1 0 0 0;
+}
+
+.buttons Button {
+    margin: 0 1;
+}
+
+ModalScreen {
+    align: center middle;
+}
+
+.dialog {
+    width: 80;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: thick $primary;
+    background: $surface;
+}
+
+.dialog-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.dialog .desc {
+    margin-top: 1;
+}
+
+.dialog .current {
+    color: $text-muted;
+    margin: 1 0;
+}
+
+.dialog .danger {
+    color: $error;
+    text-style: bold;
+}
+
+.layers {
+    height: auto;
+}

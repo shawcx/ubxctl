@@ -1,0 +1,10 @@
+# UBX binary output, NMEA off
+# NAV-PVT (position, velocity, time, accuracy) and NAV-DOP every solution, NAV-SAT every 10th
+# solution (1 Hz at a 10 Hz rate). For your own software, flight controllers and robots: one
+# checksummed binary message has everything, with full precision. Undo with output-nmea-default.
+
+CFG-UART1OUTPROT-UBX true
+CFG-UART1OUTPROT-NMEA false
+CFG-MSGOUT-UBX_NAV_PVT_UART1 1
+CFG-MSGOUT-UBX_NAV_DOP_UART1 1
+CFG-MSGOUT-UBX_NAV_SAT_UART1 10

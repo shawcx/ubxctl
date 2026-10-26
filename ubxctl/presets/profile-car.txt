@@ -1,0 +1,9 @@
+# Profile: car, 10 Hz
+# Automotive dynamic model (assumes low vertical velocity and limited acceleration, which
+# smooths the track) at 10 Hz, with the odometer on its car profile.
+
+CFG-NAVSPG-DYNMODEL 4
+CFG-RATE-MEAS 100
+CFG-RATE-NAV 1
+CFG-ODO-USE_ODO true
+CFG-ODO-PROFILE 3

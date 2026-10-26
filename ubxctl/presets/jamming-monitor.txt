@@ -1,0 +1,5 @@
+# Enable jamming / interference monitor
+# Turns on the receiver's jamming detection, so the Status tab (MON-RF) shows OK / warning /
+# critical instead of "unknown". No effect on positioning.
+
+CFG-ITFM-ENABLE true
