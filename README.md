@@ -17,6 +17,8 @@ Setup: `python3 -m venv .venv && .venv/bin/pip install -e .`
 
 1. **Status**: fix, position, accuracy, DOP, antenna/jamming state per RF block, and the
    receiver's odometer (trip ± uncertainty, total). **Reset trip** (or `o`) zeroes the trip.
+   Without an antenna supervisor (e.g. NEO-F10N), the antenna type is guessed from AGC: an
+   active antenna's gain pulls AGC low (7% vs. 73% unplugged on a NEO-F10N).
 2. **Satellites**: per-SV C/N0, elevation/azimuth, used flag, per-signal C/N0 (e.g. L1C/A and L5Q).
 3. **Configuration**: every key the receiver reports, by group, with RAM / BBR / Flash / Default
    values. Yellow = differs from default or stored in BBR/Flash. Enter edits a key and lets you

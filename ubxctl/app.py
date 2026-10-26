@@ -39,6 +39,7 @@ FIX_TYPES = {0: "No fix", 1: "Dead reckoning", 2: "2D", 3: "3D", 4: "GNSS + DR",
 CARR_SOLN = {0: "", 1: " RTK float", 2: " RTK fixed"}
 ANT_STATUS = {0: "init", 1: "unknown", 2: "OK", 3: "SHORT", 4: "OPEN"}
 ANT_POWER = {0: "off", 1: "on", 2: "unknown"}
+AGC_ACTIVE_MAX = 40  # % of max gain; below this an active antenna is likely (see antenna_guess)
 JAM_STATE = {0: "unknown", 1: "OK", 2: "warning", 3: "CRITICAL"}
 PORT_ORDER = ["I2C", "UART1", "UART2", "USB", "SPI"]
 POLLED = [(ubx.CLS_NAV, 0x07), (ubx.CLS_NAV, 0x04), (ubx.CLS_NAV, 0x35), (ubx.CLS_NAV, 0x43),
@@ -74,6 +75,23 @@ def edit_text(kd: ubx.KeyDef, raw: bytes | None) -> str:
 
 def fmt_dist(m: int) -> str:
     return f"{m} m" if m < 1000 else f"{m / 1000:.2f} km"
+
+
+def antenna_guess(agc_pct: float, lna_mode: int | None, jam: str, tracking: bool) -> tuple[str, str]:
+    """(text, style) guessing the antenna type from AGC, for receivers without an antenna supervisor.
+
+    An active antenna's gain makes the receiver turn its own down. Measured on a NEO-F10N in normal
+    LNA mode: AGC 7% with an active antenna, 73% unplugged.
+    """
+    if lna_mode not in (None, 0):
+        return "unknown (AGC guess needs normal LNA mode)", ""
+    if jam in ("warning", "CRITICAL"):
+        return "unknown (AGC unreliable while jammed)", ""
+    if agc_pct < AGC_ACTIVE_MAX:
+        return "likely active (from AGC)", "green"
+    if tracking:
+        return "likely passive (from AGC)", "green"
+    return "passive or none (from AGC)", "yellow"
 
 
 def preset_header(path: Path) -> tuple[str, str]:
@@ -528,13 +546,21 @@ class UbloxApp(App):
         r.add_column()
         if self.rf:
             rf = self.rf
+            lna = ubx.lookup("CFG-HW-RF_LNA_MODE")
+            lna_raw = self.cfg[ubx.LAYER_RAM].get(lna.key)
+            lna_mode = ubx.decode(lna, lna_raw) if lna_raw is not None else None
+            tracking = any(row[2] for row in self.sat_rows)
             for i in range(1, rf.nBlocks + 1):
                 g = lambda a: getattr(rf, f"{a}_{i:02d}")  # noqa: E731
                 jam = JAM_STATE.get(g("jammingState"), "?")
                 ant = ANT_STATUS.get(g("antStatus"), "?")
+                if ant == "unknown":  # no antenna supervisor
+                    ant_text = Text(*antenna_guess(g("agcCnt") / 81.91, lna_mode, jam, tracking))
+                else:
+                    ant_text = Text(f"{ant}, power {ANT_POWER.get(g('antPower'), '?')}",
+                                    style="green" if ant == "OK" else "red")
                 r.add_row(f"RF block {g('blockId')}", "")
-                r.add_row("  Antenna", Text(f"{ant}, power {ANT_POWER.get(g('antPower'), '?')}",
-                                            style="green" if ant in ("OK", "unknown") else "red"))
+                r.add_row("  Antenna", ant_text)
                 r.add_row("  Jamming", Text(f"{jam}  (indicator {g('jamInd')}/255)",
                                             style="red" if jam in ("warning", "CRITICAL") else ""))
                 r.add_row("  Noise", f"{g('noisePerMS')} /ms")
