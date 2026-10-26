@@ -10,10 +10,17 @@ out of names and titles, and keep the README disclaimer.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e .   # editable install; restart ubxctl to pick up edits
-.venv/bin/ubxctl                                      # /dev/ttyUSB0 (macOS: first /dev/cu.usbserial-*), auto-detects baud
+.venv/bin/ubxctl                                      # auto-detects port (find_port) and baud
 .venv/bin/ubxctl -p /dev/ttyACM0 -b 921600
 .venv/bin/python -c "import ubxctl.app"               # quick import/syntax check
+.venv/bin/python scripts/screenshots.py [port [baud]] # regenerate docs/*.svg from a receiver (read-only)
+uv build && uvx twine check --strict dist/*           # check packaging
 ```
+
+Releases: bump `version` in `pyproject.toml`, push, then `gh release create vX.Y.Z --generate-notes`.
+`.github/workflows/release.yml` publishes to PyPI with trusted publishing (no token) and fails if the
+tag doesn't match the version. The README uses absolute `raw.githubusercontent.com` image URLs so
+they also render on PyPI.
 
 There is no test suite, linter or CI yet (see ROADMAP.md). UI changes can be checked headlessly with
 `App.run_test()` and `app.save_screenshot()`. For runs that shouldn't touch hardware, pass `UbloxApp` a
@@ -24,10 +31,17 @@ frames built with `ubx.frame()` by appending `("UBX", frame)` to `app.inbox`.
 
 ## Working with the real receiver
 
-- Dev hardware: NEO-F10N, firmware `EXT SPGL1L5 6.00`, protocol 40.00, on `/dev/ttyUSB0` at 921600 baud.
-  Its flash layer holds the user's own saved settings (10 Hz, 921600, car profile, odometer and others).
-- **Check `pgrep -af ubxctl` before opening the port.** Linux ttys aren't exclusive. If the user's ubxctl
-  is running, both processes get a corrupted stream and request/response matching breaks.
+- Dev hardware: NEO-F10N, firmware `EXT SPGL1L5 6.00`, protocol 40.00.
+  - Linux: `/dev/ttyUSB0` at 921600 baud. Its flash layer holds the user's own saved settings (10 Hz,
+    921600, car profile, odometer and others).
+  - macOS: `/dev/cu.usbserial-110` (CH340 adapter) at 38400 baud, factory settings with nothing in
+    BBR/Flash, dual-band active antenna (AGC 7–11% connected, 73% unplugged).
+- **Check for a running ubxctl before opening the port**: `pgrep -af ubxctl` on Linux, `pgrep -fl ubxctl`
+  on macOS (BSD `-a` means something else). Serial ports aren't exclusive on either. If the user's
+  ubxctl is running, both processes get a corrupted stream and request/response matching breaks.
+- 10 Hz with the default NMEA set needs more than 38400 baud. The UART saturates, the receiver drops UBX
+  replies (large ones like NAV-SAT first), and `detect_baud`'s 0.6 s probe fails. To work through it,
+  set `CFG-UART1OUTPROT-NMEA` false in RAM, then restore it.
 - Test writes go to the RAM layer only. Snapshot the values with `valget` first and restore them
   afterwards. Never write BBR/Flash or reboot the receiver without asking: those change the user's
   saved setup.
@@ -54,6 +68,8 @@ Data flows through four modules:
   - `valset` switches to a VALSET transaction above 64 keys; the last chunk commits.
   - `set_receiver_baud` doesn't wait for an ACK: the receiver switches rate before replying, so it
     writes, changes the local baud, and probes with MON-VER.
+  - `find_port()` picks the default port from pyserial's `list_ports` by USB vendor ID: u-blox native
+    USB (0x1546) first, then FTDI, CP210x, CH340 and PL2303 bridges.
 - **`app.py`**: Textual UI.
   - The device listener only appends to the `app.inbox` deque. A 0.2 s timer (`_drain`) consumes it on
     the UI thread, so never touch widgets from the reader thread.
@@ -64,9 +80,13 @@ Data flows through four modules:
     just those keys and the affected rows.
   - Blocking device calls run in `@work(thread=True)` workers and update the UI via `call_from_thread`.
   - The Messages tab is derived from `CFG-MSGOUT-<MSG>_<PORT>` key names.
+  - When MON-RF reports antenna status "unknown" (no antenna supervisor, as on the NEO-F10N),
+    `antenna_guess()` infers active vs. passive from AGC. `AGC_ACTIVE_MAX` (40%) comes from two NEO-F10N
+    readings only; it needs the normal LNA mode and no jamming.
   - Flash is assumed present (VALGET can't distinguish "no flash" from "empty flash") until a flash
     write is NAKed.
-- **`portcheck.py`**: runs in `run()` before the app opens the port.
+- **`portcheck.py`**: runs in `run()` before the app opens the port. It's Linux-only and returns early
+  where there's no `/proc` (macOS), so nothing there checks for other programs holding the port.
   - Asks a running gpsd for its devices with `?DEVICES;` on its TCP port, and checks
     `/etc/default/gpsd` for socket-activation risk.
   - Stops `gpsd.socket` and `gpsd.service` via `sudo systemctl` only if gpsd is using this port, and
