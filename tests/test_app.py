@@ -1,13 +1,14 @@
 import asyncio
 import io
+import struct
 import time
 
 import pytest
-from pyubx2 import GET, UBXMessage
 from rich.console import Console
 from textual.widgets import Static
 
 from ubxctl import app as appmod
+from ubxctl import ubx
 from ubxctl.app import LINK_SATURATED, UbloxApp, antenna_guess, link_load
 
 RXINFO = {"sw": "EXT SPGL1L5 6.00 (041e8a)", "hw": "000A0000",
@@ -60,12 +61,15 @@ class StubDevice:
 
 
 def mon_rf(agc: int, ant_status: int = 1, jamming: int = 1) -> bytes:
-    blocks = {}
-    for i, block in ((1, 0), (2, 1)):
-        blocks.update({f"blockId_{i:02d}": block, f"jammingState_{i:02d}": jamming,
-                       f"antStatus_{i:02d}": ant_status, f"antPower_{i:02d}": 2,
-                       f"noisePerMS_{i:02d}": 90, f"agcCnt_{i:02d}": agc, f"jamInd_{i:02d}": 10})
-    return UBXMessage("MON", "MON-RF", GET, version=0, nBlocks=2, **blocks).serialize()
+    # Packed by hand: pyubx2 1.4 picks the MON-RF layout from a payload's length, so it can't
+    # build one from keywords. Two 24-byte blocks (L1 and L2/L5), as gen 9+ receivers send.
+    payload = struct.pack("<BBBB", 0, 2, 0, 0)  # version, nBlocks, recInf, reserved0
+    for block in (0, 1):
+        # blockId, flags (jammingState), antStatus, antPower, postStatus, reserved1,
+        # noisePerMS, agcCnt, jamInd, ofsI, magI, ofsQ, magQ, reserved2
+        payload += struct.pack("<BBBBI4sHHBbBbB3s", block, jamming, ant_status, 2, 0, b"",
+                               90, agc, 10, 0, 0, 0, 0, b"")
+    return ubx.frame(ubx.CLS_MON, 0x38, payload)
 
 
 def text(app, selector: str) -> str:
