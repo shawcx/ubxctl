@@ -15,6 +15,10 @@ from . import ubx
 
 BAUD_CANDIDATES = (38400, 9600, 115200, 230400, 460800, 921600)
 SATURATED_RETRIES = 4  # MON-VER polls at a rate with valid traffic but no reply yet
+# A VALGET NAK can mean "busy" as well as "nothing stored": the ZED-F9R (HPS 1.00) NAKs every
+# VALGET for ~150 ms around each navigation epoch. Ask again after the window before believing it.
+VALGET_RETRIES = 2
+VALGET_RETRY_DELAY = 0.15
 # USB vendor IDs in find_port() preference order: u-blox native USB, then USB-serial bridges
 # (FTDI, Silicon Labs CP210x, WCH CH340, Prolific PL2303).
 USB_VIDS = {vid: i for i, vid in enumerate((0x1546, 0x0403, 0x10C4, 0x1A86, 0x067B))}
@@ -171,8 +175,8 @@ class Device:
     def valget(self, layer: int, keys: list[int] | None = None) -> dict[int, bytes] | None:
         """Read keys (default: everything) from a layer, following pagination.
 
-        Returns {} if the layer holds none of the keys (receiver NAKs), or None
-        if the receiver didn't answer.
+        Returns {} if the layer holds none of the keys (receiver NAKs every
+        try), or None if the receiver didn't answer.
         """
         keys = keys or [ubx.WILDCARD_ALL]
         out: dict[int, bytes] = {}
@@ -187,10 +191,14 @@ class Device:
                             return f[7] == layer and struct.unpack_from("<H", f, 8)[0] == pos
                         return f[2] == ubx.CLS_ACK and f[3] == 0x00 and f[6] == ubx.CLS_CFG \
                             and f[7] == ubx.ID_VALGET
-                    f = self.request(ubx.valget(layer, chunk, pos), match)
+                    for attempt in range(VALGET_RETRIES + 1):
+                        f = self.request(ubx.valget(layer, chunk, pos), match)
+                        if f is None or f[2] != ubx.CLS_ACK or attempt == VALGET_RETRIES:
+                            break
+                        time.sleep(VALGET_RETRY_DELAY)  # NAK: maybe busy, see VALGET_RETRIES
                     if f is None:
                         return None
-                    if f[2] == ubx.CLS_ACK:  # NAK: nothing stored for these keys
+                    if f[2] == ubx.CLS_ACK:  # NAK every time: nothing stored for these keys
                         break
                     items = ubx.parse_cfgdata(f[10:-2])
                     out.update(items)

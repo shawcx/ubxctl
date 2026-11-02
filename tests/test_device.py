@@ -40,10 +40,12 @@ class FakeReceiver:
     """
 
     def __init__(self, port, baudrate, timeout=None, *, talks=True, answers=True, drop=0,
-                 config=None):
+                 config=None, busy=()):
         self.port, self.baudrate = port, baudrate
         self.talks, self.answers, self.drop = talks, answers, drop
         self.config = config or {}  # layer -> {key: raw}
+        self.busy = set(busy)  # VALGET request numbers (from 0) NAKed as if busy, like the ZED-F9R
+        self._valgets = 0
         self.writes: list[bytes] = []
         self._out = bytearray()
         self._lock = threading.Lock()
@@ -87,7 +89,8 @@ class FakeReceiver:
     def _valget(self, payload: bytes) -> bytes:
         _, layer, pos = struct.unpack_from("<BBH", payload)
         stored = self.config.get(layer, {})
-        if not stored:
+        n, self._valgets = self._valgets, self._valgets + 1
+        if not stored or n in self.busy:
             return ubx.frame(ubx.CLS_ACK, 0x00, bytes((ubx.CLS_CFG, ubx.ID_VALGET)))
         page = list(stored.items())[pos:pos + ubx.MAX_KEYS_PER_MSG]
         body = b"".join(struct.pack("<I", k) + v for k, v in page)
@@ -116,6 +119,7 @@ def fake_serial(monkeypatch):
 
     monkeypatch.setattr(device.serial, "Serial", factory)
     monkeypatch.setattr(device, "SATURATED_RETRIES", 2)
+    monkeypatch.setattr(device, "VALGET_RETRY_DELAY", 0)
     return SimpleNamespace(set=opts.update, made=made)
 
 
@@ -176,10 +180,31 @@ def test_valget_follows_pagination(fake_serial, dev):
     assert dev.valget(ubx.LAYER_RAM) == stored
 
 
+def valgets_sent(fake_serial) -> int:
+    return sum(w[2:4] == bytes((ubx.CLS_CFG, ubx.ID_VALGET)) for w in fake_serial.made[0].writes)
+
+
 def test_valget_nak_means_empty_layer(fake_serial, dev):
     fake_serial.set(config={ubx.LAYER_RAM: make_items(3)})
     dev.open()
     assert dev.valget(ubx.LAYER_FLASH) == {}
+    assert valgets_sent(fake_serial) == device.VALGET_RETRIES + 1  # a NAK is only believed when repeated
+
+
+def test_valget_retries_a_busy_nak(fake_serial, dev):
+    # The ZED-F9R NAKs VALGETs around each navigation epoch; a wildcard read stopped at that page.
+    stored = make_items(150)
+    fake_serial.set(config={ubx.LAYER_RAM: stored}, busy={1, 2})  # the second page, twice
+    dev.open()
+    assert dev.valget(ubx.LAYER_RAM) == stored
+    assert valgets_sent(fake_serial) == 5
+
+
+def test_valget_retries_a_busy_nak_for_listed_keys(fake_serial, dev):
+    stored = make_items(3)
+    fake_serial.set(config={ubx.LAYER_RAM: stored}, busy={0})
+    dev.open()
+    assert dev.valget(ubx.LAYER_RAM, list(stored)) == stored
 
 
 def test_valget_without_answer_is_none(fake_serial, dev):

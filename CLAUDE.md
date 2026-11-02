@@ -79,7 +79,9 @@ Data flows through four modules:
   - `request()` registers a waiter before writing, then matches the first UBX frame that satisfies a
     predicate. All config operations are serialized by `_cfg_lock`.
   - `valget` uses the wildcard key `0x0FFFFFFF` with position-based pagination (64 keys per message).
-    A NAK means "layer holds none of these keys" and returns `{}`. `None` means no answer.
+    A NAK means "layer holds none of these keys" and returns `{}`, but only once it repeats: the ZED-F9R
+    NAKs every VALGET for ~150 ms around each navigation epoch, so `valget` retries a NAK
+    (`VALGET_RETRIES`, `VALGET_RETRY_DELAY`). `None` means no answer.
   - `valset` switches to a VALSET transaction above 64 keys; the last chunk commits.
   - `set_receiver_baud` doesn't wait for an ACK: the receiver switches rate before replying, so it
     writes, changes the local baud, and probes with MON-VER.
