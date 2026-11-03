@@ -86,7 +86,8 @@ RMC = nmea("GNRMC,060556.00,A,5133.82000,N,00007.50000,W,1.944,90.5,021126,,,D,V
 
 def text(app, selector: str) -> str:
     console = Console(width=200, file=io.StringIO(), record=True)
-    console.print(app.query_one(selector, Static).content)
+    w = app.query_one(selector, Static)
+    console.print(w.content if hasattr(w, "content") else w.renderable)  # .content since Textual 3
     return console.export_text()
 
 
