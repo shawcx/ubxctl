@@ -4,6 +4,7 @@ import struct
 import time
 
 import pytest
+from pyubx2 import GET, UBXMessage
 from rich.console import Console
 from textual.widgets import Static
 
@@ -72,6 +73,17 @@ def mon_rf(agc: int, ant_status: int = 1, jamming: int = 1) -> bytes:
     return ubx.frame(ubx.CLS_MON, 0x38, payload)
 
 
+def nmea(body: str) -> str:
+    cs = 0
+    for c in body.encode():
+        cs ^= c
+    return f"${body}*{cs:02X}"
+
+
+GGA = nmea("GNGGA,060556.00,5133.82000,N,00007.50000,W,2,12,0.80,35.1,M,47.3,M,,")
+RMC = nmea("GNRMC,060556.00,A,5133.82000,N,00007.50000,W,1.944,90.5,021126,,,D,V")
+
+
 def text(app, selector: str) -> str:
     console = Console(width=200, file=io.StringIO(), record=True)
     console.print(app.query_one(selector, Static).content)
@@ -123,6 +135,57 @@ def test_status_shows_the_antenna_guess():
             app.inbox.append(("UBX", mon_rf(agc=5952, ant_status=4)))  # a real supervisor: OPEN
             await pilot.pause(0.5)
             assert "OPEN, power unknown" in text(app, "#rf")
+    run(go())
+
+
+def test_status_falls_back_to_nmea(monkeypatch):
+    monkeypatch.setattr(appmod, "POS_STALE", 0.3)
+
+    async def go():
+        app = UbloxApp(StubDevice(), RXINFO)  # polls never answer, like NAV-PVT in priority mode
+        async with app.run_test(size=(130, 40)) as pilot:
+            await pilot.pause(0.4)
+            bad = RMC.replace(",A,", ",V,")  # checksum no longer matches: must be ignored
+            app.inbox.extend([("NMEA", GGA), ("NMEA", RMC), ("NMEA", bad)])
+            await pilot.pause(0.3)
+            pvt = text(app, "#pvt")
+            assert "NMEA GGA/RMC" in pvt and "DGNSS" in pvt and "not valid" not in pvt
+            assert "51.56366667°" in pvt and "-0.12500000°" in pvt
+            assert "2026-11-02 06:05:56" in pvt
+            assert "35.10 m" in pvt and "82.40 m" in pvt  # MSL, plus geoid separation 47.3
+            assert "1.00 m/s" in pvt and "90.5°" in pvt
+    run(go())
+
+
+def test_status_prefers_nav_pvt_while_it_answers(monkeypatch):
+    monkeypatch.setattr(appmod, "POS_STALE", 0.3)
+    pvt_frame = UBXMessage("NAV", "NAV-PVT", GET, fixType=3, gnssFixOk=1, lat=52.0, lon=1.0,
+                           numSV=9).serialize()
+
+    async def go():
+        app = UbloxApp(StubDevice(), RXINFO)
+        async with app.run_test(size=(130, 40)) as pilot:
+            await pilot.pause(0.4)
+            app.inbox.extend([("UBX", pvt_frame), ("NMEA", GGA)])
+            await pilot.pause(0.2)
+            pvt = text(app, "#pvt")
+            assert "52.00000000°" in pvt and "NMEA" not in pvt
+            await pilot.pause(0.4)  # NAV-PVT now missing for longer than POS_STALE
+            app.inbox.append(("NMEA", GGA))
+            await pilot.pause(0.3)
+            assert "51.56366667°" in text(app, "#pvt")
+    run(go())
+
+
+def test_status_explains_priority_mode():
+    async def go():
+        app = UbloxApp(StubDevice(), RXINFO)
+        async with app.run_test(size=(130, 40)) as pilot:
+            await pilot.pause(0.3)  # let load_config finish first, it replaces app.cfg
+            assert "CFG-RATE-NAV_PRIO" not in text(app, "#pvt")
+            app.cfg[ubx.LAYER_RAM][ubx.lookup("CFG-RATE-NAV_PRIO").key] = b"\x0a"
+            await pilot.pause(1.1)  # _tick redraws every second
+            assert "CFG-RATE-NAV_PRIO" in text(app, "#pvt")
     run(go())
 
 

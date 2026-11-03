@@ -36,7 +36,9 @@ Without `-p`, ubxctl picks the first u-blox USB device, else the first common US
 6. **Tools**: save RAM changes to Flash/BBR, clear saved config, export/import, hot/warm/cold start, reboot.
 
 Status data is fetched by polling (NAV-PVT, NAV-DOP, NAV-SAT, NAV-SIG, MON-RF once a second), so it
-doesn't change the receiver's output configuration. `p` pauses polling.
+doesn't change the receiver's output configuration. `p` pauses polling. If NAV-PVT stops answering
+(as on a ZED-F9R in priority navigation mode, `CFG-RATE-NAV_PRIO`), the position comes from NMEA
+GGA/RMC instead.
 
 ![Satellites tab](https://raw.githubusercontent.com/shawcx/ubxctl/main/docs/satellites.svg)
 

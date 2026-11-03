@@ -6,6 +6,7 @@ import collections
 import time
 from pathlib import Path
 
+from pynmeagps import NMEAReader
 from pyubx2.ubxtypes_core import UBX_MSGIDS
 from rich.table import Table
 from rich.text import Text
@@ -37,6 +38,11 @@ SIGNALS = {
 }
 FIX_TYPES = {0: "No fix", 1: "Dead reckoning", 2: "2D", 3: "3D", 4: "GNSS + DR", 5: "Time only"}
 CARR_SOLN = {0: "", 1: " RTK float", 2: " RTK fixed"}
+GGA_QUALITY = {0: "No fix", 1: "GNSS", 2: "DGNSS", 4: "RTK fixed", 5: "RTK float", 6: "Dead reckoning"}
+KNOTS = 0.514444  # m/s
+# Seconds without NAV-PVT before the Status tab shows the NMEA position instead. In priority navigation
+# mode (CFG-RATE-NAV_PRIO > 0) the ZED-F9R (HPS 1.40) stops answering NAV-PVT polls altogether.
+POS_STALE = 3.0
 ANT_STATUS = {0: "init", 1: "unknown", 2: "OK", 3: "SHORT", 4: "OPEN"}
 ANT_POWER = {0: "off", 1: "on", 2: "unknown"}
 AGC_ACTIVE_MAX = 40  # % of max gain; below this an active antenna is likely (see antenna_guess)
@@ -317,6 +323,9 @@ class UbloxApp(App):
         self.sat_rows: list = []
         self.sig: dict[tuple[int, int], list[tuple[str, int]]] = {}
         self.last_pvt = 0.0
+        self.gga = self.rmc = None  # latest NMEA position, the fallback when NAV-PVT doesn't answer
+        self.last_nmea = 0.0
+        self.t_start = time.monotonic()
         self.link: collections.deque = collections.deque()  # (time, rx_bytes) for link_load
         self.link_baud = device.baud
         self.link_saturated = False
@@ -483,6 +492,8 @@ class UbloxApp(App):
                 self.notify(f"Serial error: {item}", severity="error", timeout=10)
                 continue
             if kind == "NMEA":
+                if item[3:6] in ("GGA", "RMC"):
+                    changed |= self._handle_nmea(item)
                 if opts["c_nmea"]:
                     lines.append(Text(item))
                 continue
@@ -536,12 +547,74 @@ class UbloxApp(App):
             return False
         return True
 
+    def _handle_nmea(self, line: str) -> bool:
+        try:
+            m = NMEAReader.parse(line.encode("ascii", "replace"))  # checks the checksum
+        except Exception:
+            return False
+        if m is None:
+            return False
+        if m.msgID == "GGA":
+            self.gga, self.last_nmea = m, time.monotonic()
+        elif m.msgID == "RMC":
+            self.rmc = m
+        else:
+            return False
+        return True
+
+    def _position_source(self) -> str | None:
+        """'pvt' or 'nmea': NAV-PVT unless it has been missing for POS_STALE s and NMEA is newer."""
+        pvt_missing = time.monotonic() - max(self.last_pvt, self.t_start) > POS_STALE
+        if self.gga is not None and pvt_missing and self.last_nmea > self.last_pvt:
+            return "nmea"
+        return "pvt" if self.pvt is not None else None
+
+    def _nmea_rows(self, t: Table) -> None:
+        g, r = self.gga, self.rmc
+
+        def num(v):  # pynmeagps gives "" for empty fields
+            return v if isinstance(v, (int, float)) else None
+
+        q = num(g.quality) or 0
+        ok = q > 0 and (r is None or r.status == "A")
+        t.add_row("Fix", Text(GGA_QUALITY.get(q, str(q)) + ("" if ok else "  (not valid)"),
+                              style="bold green" if ok else "bold red"))
+        t.add_row("Source", Text("NMEA GGA/RMC (NAV-PVT not answering polls)", style="dim"))
+        t.add_row("Satellites", str(num(g.numSV) or 0))
+        if g.time:
+            date = f"{r.date.isoformat()} " if r is not None and r.date else ""
+            t.add_row("UTC", date + g.time.strftime("%H:%M:%S"))
+        lat, lon, alt, sep = num(g.lat), num(g.lon), num(g.alt), num(g.sep)
+        if lat is not None and lon is not None:
+            t.add_row("Latitude", f"{lat:.8f}°")
+            t.add_row("Longitude", f"{lon:.8f}°")
+        if alt is not None:
+            t.add_row("Altitude MSL", f"{alt:.2f} m")
+            if sep is not None:
+                t.add_row("Ellipsoid ht", f"{alt + sep:.2f} m")
+        if r is not None and num(r.spd) is not None:
+            t.add_row("Speed", f"{r.spd * KNOTS:.2f} m/s  ({r.spd * 1.852:.1f} km/h)")
+        if r is not None and num(r.cog) is not None:
+            t.add_row("Heading", f"{r.cog:.1f}°")
+
+    def _waiting_text(self) -> str:
+        prio = ubx.lookup("CFG-RATE-NAV_PRIO")
+        raw = self.cfg[ubx.LAYER_RAM].get(prio.key)
+        if raw is not None and ubx.decode(prio, raw):
+            return ("waiting for NAV-PVT or NMEA GGA…\nIn priority navigation mode (CFG-RATE-NAV_PRIO) "
+                    "NAV-PVT may not answer polls: enable NMEA GGA output.")
+        return "waiting for NAV-PVT…"
+
     def _render_status(self) -> None:
-        p, d = self.pvt, self.dop
+        d = self.dop
+        src = self._position_source()
+        p = self.pvt if src == "pvt" else None
         t = Table.grid(padding=(0, 2))
         t.add_column(style="bold", min_width=12)
         t.add_column(min_width=28)
-        if p:
+        if src == "nmea":
+            self._nmea_rows(t)
+        elif p:
             fix = FIX_TYPES.get(p.fixType, str(p.fixType)) + CARR_SOLN.get(p.carrSoln, "")
             ok = p.gnssFixOk
             t.add_row("Fix", Text(fix + ("" if ok else "  (not valid)"),
@@ -559,7 +632,7 @@ class UbloxApp(App):
             t.add_row("Heading", f"{p.headMot:.1f}°")
             t.add_row("Time acc.", f"{p.tAcc} ns")
         else:
-            t.add_row("Fix", "waiting for NAV-PVT…")
+            t.add_row("Fix", self._waiting_text())
         if d:
             t.add_row("", "")
             t.add_row("DOP", f"G {d.gDOP:.2f}  P {d.pDOP:.2f}  H {d.hDOP:.2f}  V {d.vDOP:.2f}  T {d.tDOP:.2f}")
@@ -611,8 +684,10 @@ class UbloxApp(App):
             if hot:
                 r.add_row("", Text("Saturated: replies get dropped. Raise CFG-UART1-BAUDRATE or reduce "
                                    "output (e.g. output-nmea-minimal).", style="red"))
-        if self.last_pvt and time.monotonic() - self.last_pvt > 3:
-            r.add_row("", Text("No NAV-PVT for > 3 s", style="bold red"))
+        last = self.last_nmea if src == "nmea" else self.last_pvt
+        if last and time.monotonic() - last > POS_STALE:
+            what = "NMEA GGA" if src == "nmea" else "NAV-PVT"
+            r.add_row("", Text(f"No {what} for > {POS_STALE:g} s", style="bold red"))
         self.query_one("#rf", Static).update(r)
 
     def _render_sats(self) -> None:
@@ -940,7 +1015,7 @@ class UbloxApp(App):
         mask, name = {"t_hot": (ubx.HOT_START, "Hot"), "t_warm": (ubx.WARM_START, "Warm"),
                       "t_cold": (ubx.COLD_START, "Cold")}[event.button.id]
         self.dev.reset(mask, ubx.RST_GNSS)
-        self.pvt = None
+        self.pvt = self.gga = self.rmc = None
         self.notify(f"{name} start sent (GNSS restart, configuration kept)")
 
     @on(Button.Pressed, "#t_reboot")

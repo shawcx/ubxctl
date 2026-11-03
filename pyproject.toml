@@ -7,7 +7,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Matthew Shaw" }]
 requires-python = ">=3.10"
-dependencies = ["textual>=0.80", "pyubx2>=1.2", "pyserial>=3.5"]
+dependencies = ["textual>=0.80", "pyubx2>=1.2", "pynmeagps>=1.0", "pyserial>=3.5"]
 keywords = ["gnss", "gps", "ubx", "u-blox", "tui", "textual", "serial"]
 classifiers = [
     "Development Status :: 3 - Alpha",

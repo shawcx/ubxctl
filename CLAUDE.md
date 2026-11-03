@@ -92,6 +92,9 @@ Data flows through four modules:
     the UI thread, so never touch widgets from the reader thread.
   - Live status comes from **polling** (`POLLED`, every 1 s), not from enabling periodic outputs, so
     viewing doesn't change the receiver's configuration.
+  - In priority navigation mode (`CFG-RATE-NAV_PRIO` > 0) the ZED-F9R stops answering NAV-PVT polls.
+    Once NAV-PVT has been missing for `POS_STALE` s, the Status tab shows the position from the NMEA
+    GGA/RMC sentences (parsed with pynmeagps) instead. NMEA has no accuracy estimates.
   - `self.cfg` maps layer → `{key_id: raw bytes}` (RAM, BBR, Flash, Default) and is the only config
     cache. `load_config()` fills it with wildcard VALGETs; after any write, `_reread(keys)` refreshes
     just those keys and the affected rows.
