@@ -1,0 +1,69 @@
+.TH UBXCTL 1 "November 2026" "ubxctl 0.1.0" "User Commands"
+.SH NAME
+ubxctl \- terminal tool for configuring UBX GNSS receivers (unofficial)
+.SH SYNOPSIS
+.B ubxctl
+.RB [ \-p
+.IR port ]
+.RB [ \-b
+.IR baud ]
+.SH DESCRIPTION
+.B ubxctl
+is a terminal user interface for configuring u\-blox generation 9 and later GNSS
+receivers over a serial or USB port.
+It is an independent project, not affiliated with or endorsed by u\-blox AG.
+.PP
+The tabs show the fix, satellites and RF status, every configuration key in the RAM,
+BBR, Flash and default layers, message output rates, a raw message console, and tools
+to save, clear, export and import configuration and to restart the receiver.
+Status is read by polling once a second, so viewing it doesn't change the receiver's
+configuration.
+Edits go to the RAM layer unless BBR or Flash is chosen.
+.SH OPTIONS
+.TP
+.BI \-p " port\fR, " \-\-port " port"
+Serial port.
+Without it, ubxctl uses the first u\-blox USB device, else the first FTDI, CP210x,
+CH340 or PL2303 USB serial adapter.
+.TP
+.BI \-b " baud\fR, " \-\-baud " baud"
+Baud rate.
+Without it, ubxctl tries the common rates and keeps the first one the receiver answers on.
+.TP
+.BR \-h ", " \-\-help
+Show a short usage message.
+.SH KEYS
+.TP
+.B 1 \fR...\fP 6
+Switch to the Status, Satellites, Configuration, Messages, Console or Tools tab.
+.TP
+.B r
+Reload the configuration from the receiver.
+.TP
+.B p
+Pause or resume status polling.
+.TP
+.B o
+Reset the trip distance.
+.TP
+.B q
+Quit.
+.SH FILES
+.TP
+.I /usr/share/ubxctl/ubxctl/presets/
+Presets offered by Tools \(-> Import, in the same
+.RI \(lq CFG\-NAME " value" \(rq
+format as Tools \(-> Export.
+.SH NOTES
+On Linux, if
+.BR gpsd (8)
+is using the port, ubxctl stops it before opening the port.
+A systemd gpsd is stopped with
+.B sudo systemctl
+and started again when ubxctl exits; a gpsd started by hand is sent SIGTERM and not
+restarted.
+Any other program holding the port stops ubxctl from starting.
+.SH SEE ALSO
+.BR gpsd (8)
+.PP
+https://github.com/shawcx/ubxctl

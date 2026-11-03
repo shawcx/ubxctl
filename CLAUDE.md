@@ -16,9 +16,18 @@ python3 -m venv .venv && .venv/bin/pip install -e .   # editable install; restar
 .venv/bin/python scripts/screenshots.py [port [baud]] # regenerate docs/*.svg from a receiver (read-only)
 .venv/bin/pip install --group test && .venv/bin/python -m pytest   # tests (~25 s, no hardware)
 uv build && uvx twine check --strict dist/*           # check packaging
+scripts/build-deb.sh                                  # dist/ubxctl_<ver>_all.deb, runs the tests and lintian
 ```
 
-Releases: bump `version` in `pyproject.toml`, push, then `gh release create vX.Y.Z --generate-notes`.
+Debian package (`debian/`): the app and the bundled pyubx2/pynmeagps/pyrtcm are private modules in
+`/usr/share/ubxctl`, and `/usr/bin/ubxctl` is a launcher (`debian/ubxctl.launcher`). Textual and
+pyserial come from Debian (13 has Textual 2.1.2, so keep the code working there). The build script
+works in a temp copy of the tree, fetches the wheels pinned in `debian/vendor.sha256`, and adds a
+`+git<date>.<commit>` suffix to the version unless HEAD is the release tag. To bump the bundled
+libraries, update `debian/vendor.sha256`, `debian/copyright` and the changelog.
+
+Releases: bump `version` in `pyproject.toml` and add a matching `debian/changelog` entry (the build
+script refuses a mismatch), push, then `gh release create vX.Y.Z --generate-notes`.
 `.github/workflows/release.yml` publishes to PyPI with trusted publishing (no token) and fails if the
 tag doesn't match the version. The README uses absolute `raw.githubusercontent.com` image URLs so
 they also render on PyPI.

@@ -1,0 +1,4 @@
+ubxctl usr/share/ubxctl
+debian/vendor/pyubx2 usr/share/ubxctl
+debian/vendor/pynmeagps usr/share/ubxctl
+debian/vendor/pyrtcm usr/share/ubxctl

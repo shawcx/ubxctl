@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+# ubxctl and the libraries it bundles are private modules in /usr/share/ubxctl.
+import sys
+
+sys.path.insert(0, "/usr/share/ubxctl")
+
+from ubxctl.__main__ import main  # noqa: E402
+
+sys.exit(main())

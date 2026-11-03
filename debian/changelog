@@ -1,0 +1,6 @@
+ubxctl (0.1.0-1) unstable; urgency=medium
+
+  * Initial Debian package. Bundles pyubx2 1.4.1, pynmeagps 1.1.8 and
+    pyrtcm 1.2.1, which Debian doesn't package.
+
+ -- Matthew Shaw <mshaw.cx@gmail.com>  Tue, 03 Nov 2026 12:42:40 -0500

@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+# ubxctl is pure Python, so there's nothing to build. The app and the libraries it bundles
+# (pyubx2, pynmeagps, pyrtcm: not in Debian; scripts/build-deb.sh fetches them into debian/vendor)
+# are installed as private modules under /usr/share/ubxctl, as Debian's Python policy asks of
+# applications. /usr/bin/ubxctl is a small launcher that puts that directory on sys.path.
+
+export PYTHONDONTWRITEBYTECODE = 1
+
+%:
+	dh $@
+
+# There's no build system, and the untracked dev Makefile (if present) must not run.
+override_dh_auto_configure override_dh_auto_build override_dh_auto_clean:
+
+override_dh_auto_install:
+	install -D -m 755 debian/ubxctl.launcher debian/ubxctl/usr/bin/ubxctl
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	PYTHONPATH=$(CURDIR):$(CURDIR)/debian/vendor python3 -m pytest -q -p no:cacheprovider tests
+endif
+
+override_dh_python3:
+	dh_python3 /usr/share/ubxctl

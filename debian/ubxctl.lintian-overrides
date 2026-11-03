@@ -1,0 +1,2 @@
+# Not packaged for the Debian archive, so there's no ITP bug to close.
+initial-upload-closes-no-bugs [usr/share/doc/ubxctl/changelog.Debian.gz:1]

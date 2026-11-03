@@ -20,6 +20,15 @@ ubxctl -p /dev/ttyACM0 -b 921600
 Without `-p`, ubxctl picks the first u-blox USB device, else the first common USB-serial adapter
 (FTDI, CP210x, CH340, PL2303). From a checkout: `python3 -m venv .venv && .venv/bin/pip install -e .`
 
+Debian 13 package, built from a checkout (uses Debian's Textual and pyserial, and bundles pyubx2,
+pynmeagps and pyrtcm, which Debian doesn't package):
+
+```
+sudo apt install debhelper dh-python python3-textual python3-serial python3-pytest
+scripts/build-deb.sh
+sudo apt install ./dist/ubxctl_*_all.deb
+```
+
 ## Tabs (keys 1–6)
 
 1. **Status**: fix, position, accuracy, DOP, antenna/jamming state per RF block, and the

@@ -7,3 +7,11 @@ dist/
 
 # receiver config exports
 ublox-config.txt
+
+# Debian build output (scripts/build-deb.sh builds in a temporary copy)
+debian/vendor/
+debian/ubxctl/
+debian/.debhelper/
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
